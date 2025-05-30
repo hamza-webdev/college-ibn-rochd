@@ -1,0 +1,1011 @@
+// build.gradle
+plugins {
+    id 'org.springframework.boot' version '3.2.5' // Utilisez une version récente et stable
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+}
+
+group = 'com.ibnrochd'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '17' // Ou une version plus récente de Java LTS
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security' // Pour la sécurité
+    implementation 'org.springframework.boot:spring-boot-starter-validation' // Pour la validation des données
+
+    // JWT Support (si vous utilisez l'authentification par token)
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5' // Ou jjwt-gson si vous préférez Gson
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test' // Pour tester la sécurité
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+```java
+// src/main/java/com/ibnrochd/IbnRochdApplication.java
+package com.ibnrochd;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean; // Ajout pour CommandLineRunner
+import com.ibnrochd.model.ERole; // Ajout
+import com.ibnrochd.model.Role; // Ajout
+import com.ibnrochd.repository.RoleRepository; // Ajout
+import org.springframework.boot.CommandLineRunner; // Ajout
+
+/**
+ * Classe principale de l'application Spring Boot Ibn Rochd.
+ * Point d'entrée de l'application.
+ */
+@SpringBootApplication
+public class IbnRochdApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(IbnRochdApplication.class, args);
+    }
+
+    /**
+     * Bean pour initialiser les rôles dans la base de données au démarrage si nécessaire.
+     * @param roleRepository Le repository pour les rôles.
+     * @return Un CommandLineRunner.
+     */
+    @Bean
+    CommandLineRunner initRoles(RoleRepository roleRepository) {
+        return args -> {
+            if (roleRepository.findByName(ERole.ROLE_ETUDIANT).isEmpty()) {
+                roleRepository.save(new Role(ERole.ROLE_ETUDIANT));
+                System.out.println("Rôle ETUDIANT initialisé.");
+            }
+            if (roleRepository.findByName(ERole.ROLE_PROFESSEUR).isEmpty()) {
+                roleRepository.save(new Role(ERole.ROLE_PROFESSEUR));
+                System.out.println("Rôle PROFESSEUR initialisé.");
+            }
+            if (roleRepository.findByName(ERole.ROLE_ADMIN).isEmpty()) {
+                roleRepository.save(new Role(ERole.ROLE_ADMIN));
+                System.out.println("Rôle ADMIN initialisé.");
+            }
+        };
+    }
+}
+```java
+// src/main/java/com/ibnrochd/model/User.java
+package com.ibnrochd.model;
+
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef; // Important pour les références
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.Indexed;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.util.Set;
+import java.util.HashSet; // Ajout
+import java.util.Date;
+
+/**
+ * Modèle représentant un utilisateur (Étudiant, Professeur, Admin).
+ * Le nom de la collection MongoDB sera "users".
+ */
+@Document(collection = "users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class User {
+
+    @Id
+    private String id;
+
+    @NotBlank(message = "Le prénom ne peut pas être vide")
+    @Size(min = 2, max = 50, message = "Le prénom doit contenir entre 2 et 50 caractères")
+    private String prenom;
+
+    @NotBlank(message = "Le nom ne peut pas être vide")
+    @Size(min = 2, max = 50, message = "Le nom doit contenir entre 2 et 50 caractères")
+    private String nom;
+
+    @NotBlank(message = "L'email ne peut pas être vide")
+    @Email(message = "Format d'email invalide")
+    @Indexed(unique = true)
+    private String email;
+
+    @NotBlank(message = "Le mot de passe ne peut pas être vide")
+    @Size(min = 8, message = "Le mot de passe doit contenir au moins 8 caractères")
+    private String motDePasse;
+
+    @DBRef // Stocke une référence aux documents Role plutôt que de les embarquer
+    private Set<Role> roles = new HashSet<>(); // Initialiser pour éviter NullPointerException
+
+    private boolean active = true;
+
+    private Date dateCreation = new Date();
+    private Date dateMiseAJour;
+
+    public User(String prenom, String nom, String email, String motDePasse) {
+        this.prenom = prenom;
+        this.nom = nom;
+        this.email = email;
+        this.motDePasse = motDePasse;
+        this.dateCreation = new Date();
+    }
+}
+```java
+// src/main/java/com/ibnrochd/model/Role.java
+package com.ibnrochd.model;
+
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.Indexed; // Ajout pour l'unicité du nom
+
+/**
+ * Modèle représentant un rôle utilisateur (ex: ROLE_ETUDIANT, ROLE_PROFESSEUR, ROLE_ADMIN).
+ * Le nom de la collection MongoDB sera "roles".
+ */
+@Document(collection = "roles")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Role {
+    @Id
+    private String id;
+
+    @Indexed(unique = true) // Assure que chaque nom de rôle est unique
+    private ERole name;
+
+    public Role(ERole name) {
+        this.name = name;
+    }
+}
+```java
+// src/main/java/com/ibnrochd/model/ERole.java
+package com.ibnrochd.model;
+
+/**
+ * Énumération des rôles possibles pour un utilisateur.
+ */
+public enum ERole {
+    ROLE_ETUDIANT,
+    ROLE_PROFESSEUR,
+    ROLE_ADMIN
+}
+```java
+// src/main/java/com/ibnrochd/repository/UserRepository.java
+package com.ibnrochd.repository;
+
+import com.ibnrochd.model.User;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+/**
+ * Repository Spring Data MongoDB pour l'entité User.
+ */
+@Repository
+public interface UserRepository extends MongoRepository<User, String> {
+
+    Optional<User> findByEmail(String email);
+
+    Boolean existsByEmail(String email);
+}
+```java
+// src/main/java/com/ibnrochd/repository/RoleRepository.java
+package com.ibnrochd.repository;
+
+import com.ibnrochd.model.Role;
+import com.ibnrochd.model.ERole;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+/**
+ * Repository Spring Data MongoDB pour l'entité Role.
+ */
+@Repository
+public interface RoleRepository extends MongoRepository<Role, String> {
+    Optional<Role> findByName(ERole name);
+}
+```java
+// src/main/java/com/ibnrochd/dto/request/LoginRequest.java
+package com.ibnrochd.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+/**
+ * DTO pour la requête de connexion.
+ */
+@Data
+public class LoginRequest {
+    @NotBlank(message = "L'email est requis")
+    private String email;
+
+    @NotBlank(message = "Le mot de passe est requis")
+    private String motDePasse;
+}
+```java
+// src/main/java/com/ibnrochd/dto/request/SignupRequest.java
+package com.ibnrochd.dto.request;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+import java.util.Set;
+
+/**
+ * DTO pour la requête d'inscription.
+ */
+@Data
+public class SignupRequest {
+    @NotBlank
+    @Size(min = 2, max = 50)
+    private String prenom;
+
+    @NotBlank
+    @Size(min = 2, max = 50)
+    private String nom;
+
+    @NotBlank
+    @Size(max = 70)
+    @Email
+    private String email;
+
+    private Set<String> role; // Noms des rôles sous forme de String (ex: "admin", "etudiant")
+
+    @NotBlank
+    @Size(min = 8, max = 120)
+    private String motDePasse;
+}
+```java
+// src/main/java/com/ibnrochd/dto/response/UserInfoResponse.java
+package com.ibnrochd.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import java.util.List;
+
+/**
+ * DTO pour la réponse d'information utilisateur après connexion/inscription.
+ */
+@Data
+@AllArgsConstructor
+public class UserInfoResponse {
+    private String id;
+    private String prenom;
+    private String nom;
+    private String email;
+    private List<String> roles;
+    private String token; // Le token JWT
+    private String type = "Bearer";
+
+    public UserInfoResponse(String id, String prenom, String nom, String email, List<String> roles, String token) {
+        this.id = id;
+        this.prenom = prenom;
+        this.nom = nom;
+        this.email = email;
+        this.roles = roles;
+        this.token = token;
+    }
+}
+```java
+// src/main/java/com/ibnrochd/dto/response/MessageResponse.java
+package com.ibnrochd.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+/**
+ * DTO pour les messages de réponse génériques.
+ */
+@Data
+@AllArgsConstructor
+public class MessageResponse {
+    private String message;
+}
+```java
+// src/main/java/com/ibnrochd/security/jwt/JwtUtils.java
+package com.ibnrochd.security.jwt;
+
+import com.ibnrochd.security.services.UserDetailsImpl;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Component;
+
+import java.security.Key;
+import java.util.Date;
+
+/**
+ * Classe utilitaire pour la gestion des tokens JWT (création, validation, extraction d'informations).
+ */
+@Component
+public class JwtUtils {
+    private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
+
+    @Value("${ibnrochd.app.jwtSecret}") // Clé secrète pour signer les tokens JWT
+    private String jwtSecret;
+
+    @Value("${ibnrochd.app.jwtExpirationMs}") // Durée de validité d'un token JWT en millisecondes
+    private int jwtExpirationMs;
+
+    /**
+     * Génère un token JWT à partir des informations d'authentification de l'utilisateur.
+     * @param authentication L'objet Authentication contenant les détails de l'utilisateur.
+     * @return Le token JWT généré.
+     */
+    public String generateJwtToken(Authentication authentication) {
+        UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
+
+        return Jwts.builder()
+                .setSubject((userPrincipal.getUsername())) // Utilise l'email comme sujet
+                .setIssuedAt(new Date())
+                .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
+                .signWith(key(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    /**
+     * Retourne la clé de signature à partir de la clé secrète.
+     * @return La clé de signature.
+     */
+    private Key key() {
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
+    }
+
+    /**
+     * Extrait le nom d'utilisateur (email) du token JWT.
+     * @param token Le token JWT.
+     * @return Le nom d'utilisateur (email).
+     */
+    public String getUserNameFromJwtToken(String token) {
+        return Jwts.parserBuilder().setSigningKey(key()).build()
+                .parseClaimsJws(token).getBody().getSubject();
+    }
+
+    /**
+     * Valide un token JWT.
+     * @param authToken Le token JWT à valider.
+     * @return true si le token est valide, false sinon.
+     */
+    public boolean validateJwtToken(String authToken) {
+        try {
+            Jwts.parserBuilder().setSigningKey(key()).build().parse(authToken);
+            return true;
+        } catch (MalformedJwtException e) {
+            logger.error("Token JWT invalide: {}", e.getMessage());
+        } catch (ExpiredJwtException e) {
+            logger.error("Token JWT expiré: {}", e.getMessage());
+        } catch (UnsupportedJwtException e) {
+            logger.error("Token JWT non supporté: {}", e.getMessage());
+        } catch (IllegalArgumentException e) {
+            logger.error("Les claims JWT sont vides: {}", e.getMessage());
+        }
+        return false;
+    }
+}
+```java
+// src/main/java/com/ibnrochd/security/jwt/AuthEntryPointJwt.java
+package com.ibnrochd.security.jwt;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Point d'entrée pour gérer les erreurs d'authentification.
+ * Cette classe est appelée lorsqu'un utilisateur non authentifié tente d'accéder à une ressource sécurisée.
+ */
+@Component
+public class AuthEntryPointJwt implements AuthenticationEntryPoint {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthEntryPointJwt.class);
+
+    /**
+     * Méthode appelée lorsqu'une exception d'authentification est levée.
+     * Elle renvoie une réponse d'erreur 401 Unauthorized.
+     */
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
+            throws IOException, ServletException {
+        logger.error("Erreur non autorisée: {}", authException.getMessage());
+
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+
+        final Map<String, Object> body = new HashMap<>();
+        body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+        body.put("error", "Non autorisé");
+        body.put("message", authException.getMessage());
+        body.put("path", request.getServletPath());
+
+        final ObjectMapper mapper = new ObjectMapper();
+        mapper.writeValue(response.getOutputStream(), body);
+    }
+}
+```java
+// src/main/java/com/ibnrochd/security/jwt/AuthTokenFilter.java
+package com.ibnrochd.security.jwt;
+
+import com.ibnrochd.security.services.UserDetailsServiceImpl;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+/**
+ * Filtre pour l'authentification JWT.
+ * Ce filtre s'exécute une fois par requête pour valider le token JWT et configurer l'authentification Spring Security.
+ */
+public class AuthTokenFilter extends OncePerRequestFilter {
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    private UserDetailsServiceImpl userDetailsService;
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
+
+    /**
+     * Méthode principale du filtre.
+     * Elle parse le token JWT de l'en-tête Authorization, le valide,
+     * et configure l'authentification dans le SecurityContextHolder.
+     */
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        try {
+            String jwt = parseJwt(request);
+            if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
+                String username = jwtUtils.getUserNameFromJwtToken(jwt); // username est l'email ici
+
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null, // Pas de credentials car JWT est utilisé
+                                userDetails.getAuthorities());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+        } catch (Exception e) {
+            logger.error("Impossible de définir l'authentification utilisateur: {}", e);
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Extrait le token JWT de l'en-tête "Authorization" de la requête.
+     * @param request La requête HTTP.
+     * @return Le token JWT, ou null s'il n'est pas trouvé ou mal formaté.
+     */
+    private String parseJwt(HttpServletRequest request) {
+        String headerAuth = request.getHeader("Authorization");
+
+        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
+            return headerAuth.substring(7); // Extrait le token après "Bearer "
+        }
+        return null;
+    }
+}
+```java
+// src/main/java/com/ibnrochd/security/services/UserDetailsImpl.java
+package com.ibnrochd.security.services;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.ibnrochd.model.User;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+/**
+ * Implémentation de UserDetails pour Spring Security.
+ * Contient les informations de l'utilisateur nécessaires à l'authentification et à l'autorisation.
+ */
+public class UserDetailsImpl implements UserDetails {
+    private static final long serialVersionUID = 1L;
+
+    private String id;
+    private String prenom;
+    private String nom;
+    private String email;
+
+    @JsonIgnore // Empêche la sérialisation du mot de passe dans les réponses JSON
+    private String password;
+
+    private Collection<? extends GrantedAuthority> authorities;
+
+    public UserDetailsImpl(String id, String prenom, String nom, String email, String password,
+                           Collection<? extends GrantedAuthority> authorities) {
+        this.id = id;
+        this.prenom = prenom;
+        this.nom = nom;
+        this.email = email;
+        this.password = password;
+        this.authorities = authorities;
+    }
+
+    /**
+     * Construit un UserDetailsImpl à partir d'un objet User.
+     * @param user L'objet User de la base de données.
+     * @return Une instance de UserDetailsImpl.
+     */
+    public static UserDetailsImpl build(User user) {
+        List<GrantedAuthority> authorities = user.getRoles().stream()
+                .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                .collect(Collectors.toList());
+
+        return new UserDetailsImpl(
+                user.getId(),
+                user.getPrenom(),
+                user.getNom(),
+                user.getEmail(),
+                user.getMotDePasse(),
+                authorities);
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPrenom() { return prenom; }
+
+    public String getNom() { return nom; }
+
+
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    @Override
+    public String getUsername() {
+        return email; // Utilise l'email comme nom d'utilisateur pour Spring Security
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true; // Peut être lié au champ 'active' de l'entité User
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        UserDetailsImpl user = (UserDetailsImpl) o;
+        return Objects.equals(id, user.id);
+    }
+}
+```java
+// src/main/java/com/ibnrochd/security/services/UserDetailsServiceImpl.java
+package com.ibnrochd.security.services;
+
+import com.ibnrochd.model.User;
+import com.ibnrochd.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Service pour charger les détails de l'utilisateur pour Spring Security.
+ */
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService {
+    @Autowired
+    UserRepository userRepository;
+
+    /**
+     * Charge un utilisateur par son nom d'utilisateur (qui est l'email dans cette application).
+     * @param email L'email de l'utilisateur.
+     * @return Un objet UserDetails contenant les informations de l'utilisateur.
+     * @throws UsernameNotFoundException Si l'utilisateur n'est pas trouvé.
+     */
+    @Override
+    @Transactional // Assure que les données (notamment les rôles) sont chargées correctement
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé avec l'email: " + email));
+
+        return UserDetailsImpl.build(user);
+    }
+}
+```java
+// src/main/java/com/ibnrochd/security/WebSecurityConfig.java
+package com.ibnrochd.security;
+
+import com.ibnrochd.security.jwt.AuthEntryPointJwt;
+import com.ibnrochd.security.jwt.AuthTokenFilter;
+import com.ibnrochd.security.services.UserDetailsServiceImpl;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+/**
+ * Configuration principale de Spring Security.
+ * Définit le PasswordEncoder, l'AuthenticationManager, et la chaîne de filtres de sécurité.
+ */
+@Configuration
+@EnableMethodSecurity // Permet d'utiliser @PreAuthorize sur les méthodes des contrôleurs
+public class WebSecurityConfig {
+
+    @Autowired
+    UserDetailsServiceImpl userDetailsService;
+
+    @Autowired
+    private AuthEntryPointJwt unauthorizedHandler;
+
+    /**
+     * Crée le bean pour le filtre d'authentification JWT.
+     * @return Le filtre AuthTokenFilter.
+     */
+    @Bean
+    public AuthTokenFilter authenticationJwtTokenFilter() {
+        return new AuthTokenFilter();
+    }
+
+    /**
+     * Crée le bean pour le DaoAuthenticationProvider.
+     * Ce provider utilise UserDetailsService et PasswordEncoder pour authentifier les utilisateurs.
+     * @return Le DaoAuthenticationProvider configuré.
+     */
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+
+    /**
+     * Crée le bean pour l'AuthenticationManager.
+     * @param authConfig La configuration d'authentification.
+     * @return L'AuthenticationManager.
+     * @throws Exception Si une erreur survient lors de la récupération de l'AuthenticationManager.
+     */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
+
+    /**
+     * Crée le bean pour le PasswordEncoder (BCrypt).
+     * @return Le PasswordEncoder.
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Configure la chaîne de filtres de sécurité HTTP.
+     * Définit les règles d'autorisation pour les endpoints, la gestion des sessions, CORS, CSRF.
+     * @param http L'objet HttpSecurity à configurer.
+     * @return La SecurityFilterChain construite.
+     * @throws Exception Si une erreur de configuration survient.
+     */
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.disable()) // Désactive CSRF car JWT est utilisé
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler)) // Gère les erreurs d'authentification
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Sessions stateless
+                .authorizeHttpRequests(auth ->
+                        auth.requestMatchers("/api/auth/**").permitAll() // Endpoints d'authentification publics
+                                .requestMatchers("/api/test/all").permitAll() // Endpoint de test public
+                                .anyRequest().authenticated() // Toutes les autres requêtes nécessitent une authentification
+                );
+
+        http.authenticationProvider(authenticationProvider()); // Ajoute le provider d'authentification
+
+        http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class); // Ajoute le filtre JWT
+
+        return http.build();
+    }
+}
+```java
+// src/main/java/com/ibnrochd/controller/AuthController.java
+package com.ibnrochd.controller;
+
+import com.ibnrochd.dto.request.LoginRequest;
+import com.ibnrochd.dto.request.SignupRequest;
+import com.ibnrochd.dto.response.UserInfoResponse;
+import com.ibnrochd.dto.response.MessageResponse;
+import com.ibnrochd.model.ERole;
+import com.ibnrochd.model.Role;
+import com.ibnrochd.model.User;
+import com.ibnrochd.repository.RoleRepository;
+import com.ibnrochd.repository.UserRepository;
+import com.ibnrochd.security.jwt.JwtUtils;
+import com.ibnrochd.security.services.UserDetailsImpl;
+
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * Contrôleur pour gérer les opérations d'authentification (connexion, inscription).
+ */
+@CrossOrigin(origins = "*", maxAge = 3600) // Permet les requêtes Cross-Origin
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    @Autowired
+    AuthenticationManager authenticationManager;
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    RoleRepository roleRepository;
+
+    @Autowired
+    PasswordEncoder encoder;
+
+    @Autowired
+    JwtUtils jwtUtils;
+
+    /**
+     * Endpoint pour la connexion des utilisateurs.
+     * @param loginRequest Les informations de connexion (email, mot de passe).
+     * @return Une réponse HTTP avec les informations de l'utilisateur et le token JWT.
+     */
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getMotDePasse()));
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+
+        String jwtToken = jwtUtils.generateJwtToken(authentication); // Génère le token JWT
+
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(new UserInfoResponse(userDetails.getId(),
+                userDetails.getPrenom(),
+                userDetails.getNom(),
+                userDetails.getEmail(),
+                roles,
+                jwtToken)); // Retourne le token dans la réponse JSON
+    }
+
+    /**
+     * Endpoint pour l'inscription de nouveaux utilisateurs.
+     * @param signUpRequest Les informations d'inscription.
+     * @return Une réponse HTTP indiquant le succès ou l'échec de l'inscription.
+     */
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
+        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Erreur: Cet email est déjà utilisé!"));
+        }
+
+        // Créer un nouvel utilisateur
+        User user = new User(signUpRequest.getPrenom(),
+                signUpRequest.getNom(),
+                signUpRequest.getEmail(),
+                encoder.encode(signUpRequest.getMotDePasse()));
+
+        Set<String> strRoles = signUpRequest.getRole();
+        Set<Role> roles = new HashSet<>();
+
+        if (strRoles == null || strRoles.isEmpty()) {
+            Role userRole = roleRepository.findByName(ERole.ROLE_ETUDIANT) // Rôle par défaut: ETUDIANT
+                    .orElseThrow(() -> new RuntimeException("Erreur: Rôle ETUDIANT non trouvé."));
+            roles.add(userRole);
+        } else {
+            strRoles.forEach(role -> {
+                switch (role.toLowerCase()) {
+                    case "admin":
+                        Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
+                                .orElseThrow(() -> new RuntimeException("Erreur: Rôle ADMIN non trouvé."));
+                        roles.add(adminRole);
+                        break;
+                    case "prof":
+                    case "professeur":
+                        Role modRole = roleRepository.findByName(ERole.ROLE_PROFESSEUR)
+                                .orElseThrow(() -> new RuntimeException("Erreur: Rôle PROFESSEUR non trouvé."));
+                        roles.add(modRole);
+                        break;
+                    default:
+                        Role userRole = roleRepository.findByName(ERole.ROLE_ETUDIANT)
+                                .orElseThrow(() -> new RuntimeException("Erreur: Rôle ETUDIANT non trouvé."));
+                        roles.add(userRole);
+                }
+            });
+        }
+        user.setRoles(roles);
+        userRepository.save(user);
+
+        return ResponseEntity.ok(new MessageResponse("Utilisateur enregistré avec succès!"));
+    }
+}
+```java
+// src/main/java/com/ibnrochd/controller/TestController.java
+package com.ibnrochd.controller;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+
+/**
+ * Un contrôleur de test simple pour vérifier que l'application fonctionne.
+ * Et pour tester les accès basés sur les rôles.
+ */
+@CrossOrigin(origins = "*", maxAge = 3600) // Permet les requêtes Cross-Origin
+@RestController
+@RequestMapping("/api/test")
+public class TestController {
+
+    @GetMapping("/all")
+    public String allAccess() {
+        return "Contenu public. Bienvenue sur l'application Ibn Rochd !";
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("hasRole('ETUDIANT') or hasRole('PROFESSEUR') or hasRole('ADMIN')")
+    public String userAccess() {
+        return "Contenu pour les utilisateurs connectés (Étudiants, Professeurs, Admins).";
+    }
+
+    @GetMapping("/etudiant")
+    @PreAuthorize("hasRole('ETUDIANT')")
+    public String studentAccess() {
+        return "Tableau de bord Étudiant.";
+    }
+
+    @GetMapping("/professeur")
+    @PreAuthorize("hasRole('PROFESSEUR')")
+    public String teacherAccess() {
+        return "Tableau de bord Professeur.";
+    }
+
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public String adminAccess() {
+        return "Tableau de bord Administrateur.";
+    }
+}
+```properties
+# src/main/resources/application.properties
+
+# Configuration du serveur
+server.port=8080
+
+# Configuration de MongoDB
+spring.data.mongodb.uri=mongodb://localhost:27017/ibnrochd_db
+
+# Configuration de Spring Boot
+spring.application.name=ibnrochd-backend
+
+# Configuration de la sécurité pour JWT
+# IMPORTANT: Changez cette clé secrète pour une valeur forte et unique en production!
+# Vous pouvez générer une clé Base64 ici: [https://www.base64encode.org/](https://www.base64encode.org/)
+ibnrochd.app.jwtSecret=======================VotreCleSecretePourJWTQuiEstSuffisammentLongueEtComplexeEnBase64===========================
+ibnrochd.app.jwtExpirationMs=86400000 # 24 heures en millisecondes (1 jour)
+# ibnrochd.app.jwtCookieName=ibnrochdjwt # Si vous prévoyez d'utiliser des cookies pour JWT
+
+# Logging
+logging.level.org.springframework.data.mongodb.core.MongoTemplate=INFO
+logging.level.org.springframework.security=INFO
+logging.level.com.ibnrochd=DEBUG # Pour voir les logs de votre application
+
