@@ -1,0 +1,267 @@
+Application de Gestion du Collège Ibn Rochd : Vue d'ensembleCe document décrit l'architecture, les modules, la pile technologique et l'arborescence des projets pour l'application de gestion du collège "Ibn Rochd", incluant une application web et une application mobile.1. Architecture de l'applicationL'application suivra une architecture à plusieurs niveaux :Frontend (Clients) :Application Web (Côté Client) : C'est l'interface utilisateur web, développée avec Angular, avec laquelle les étudiants, les professeurs et les administrateurs interagiront.Application Mobile (iOS & Android) : Une application multiplateforme développée avec Flutter, offrant des fonctionnalités clés et des tableaux de bord personnalisés.Backend (Côté Serveur) : C'est la logique centrale de l'application, construite avec Spring Boot et Gradle comme outil de build. Elle gérera la logique métier, les requêtes API (provenant à la fois du web et du mobile) et la communication avec la base de données.Base de données : MongoDB sera utilisé pour stocker toutes les données de l'application.graph TD
+    subgraph Clients
+        A[Frontend Web Angular (Navigateur)]
+        M[Application Mobile Flutter (iOS/Android)]
+    end
+    subgraph Serveur
+        B[Backend - API Spring Boot (Gradle)]
+    end
+    subgraph Base de Données
+        C[MongoDB]
+    end
+
+    A -- Requêtes HTTP/S (Fetch API) --> B
+    M -- Requêtes HTTP/S (HTTP Client Dart) --> B
+    B -- Requêtes MongoDB --> C
+    C -- Données --> B
+    B -- Réponses HTTP/S (JSON) --> A
+    B -- Réponses HTTP/S (JSON) --> M
+2. Modules et Fonctionnalités ClésGestion des Utilisateurs et Authentification :Contrôle d'accès basé sur les rôles (Admin, Professeur, Étudiant).Inscription et connexion des utilisateurs (web et mobile).Gestion des profils (web et mobile).Gestion des Étudiants : (Principalement web, certaines consultations sur mobile)Admissions et inscriptions des étudiants.Consultation/modification des informations des étudiants.Suivi de l'assiduité des étudiants.Gestion des notes et des relevés de notes des étudiants.Assignation des étudiants à une classe.Gestion des Classes : (Principalement web pour l'administration, consultation pour professeurs/étudiants)Création et gestion des classes pour chaque année scolaire.L'établissement comprend 4 niveaux scolaires.Nomination des classes (ex: 1ère A, 2nde B, 3ème A, 4ème B).Capacité maximale d'une classe fixée à 20 élèves.Assignation d'un professeur principal à chaque classe.Gestion de la liste des élèves par classe.Association des cours à chaque classe.Gestion des Professeurs/Personnel Enseignant : (Principalement web, certaines consultations sur mobile)Consultation/modification des profils des professeurs.Attribution des cours aux professeurs.Gestion des emplois du temps des professeurs.Gestion des Cours et Matières : (Principalement web, consultation sur mobile)Création et gestion des matières.Matières proposées (exemples) : Français, Mathématiques, Géographie, Histoire, Physique, Chimie, Anglais, Éducation Physique et Sportive (EPS), Arts Plastiques, Musique, Technologie, Sciences de la Vie et de la Terre (SVT), Philosophie, Éducation Civique.Création et gestion des cours associés aux matières pour chaque niveau scolaire.Définition des programmes et du matériel pédagogique.Gestion des plannings et des emplois du temps des cours.Gestion des Inscriptions : (Principalement web)Inscription des étudiants aux cours (souvent gérée via l'inscription à une classe qui a un ensemble de cours prédéfinis).Approbation/gestion des inscriptions par l'administration.Suivi de l'Assiduité :Marquage de l'assiduité des étudiants par les professeurs (potentiellement mobile pour les professeurs).Génération de rapports d'assiduité (web).Consultation de l'assiduité par les étudiants (mobile et web).Gestion des Notes :Saisie des notes des étudiants par les professeurs (web, potentiellement mobile).Calcul de la moyenne générale (GPA) et génération des bulletins de notes (web).Consultation des notes par les étudiants (mobile et web).Annonces et Notifications :Publication d'annonces par l'administration/les professeurs (web).Réception des annonces et notifications (web et mobile, avec notifications push sur mobile).Fonctions Administratives : (Exclusivement web)Configuration du système (années scolaires, niveaux, etc.).Rapports et analyses.Gestion des années académiques/semestres.Application Mobile - Tableaux de Bord par Rôle :Tableau de bord Étudiant :Emploi du temps de sa classe / Prochains cours.Notes récentes et devoirs à venir.Annonces importantes (générales et de classe).Résumé de l'assiduité.Notifications push pour les rappels, notes, annonces.Accès rapide aux ressources de cours.Information sur sa classe.Tableau de bord Professeur :Cours du jour / Prochains cours pour ses classes.Liste de ses classes.Fonctionnalité pour marquer l'assiduité (simplifiée par classe).Liste des devoirs à corriger.Publication rapide d'annonces à ses classes.Notifications push.Tableau de bord Administrateur (version allégée) :Aperçu des statistiques clés (ex: nombre d'inscrits par niveau, taux d'assiduité global).Notifications pour les actions urgentes ou approbations.Accès rapide aux contacts importants.3. Détails de la Pile Technologiquea. Backend (Spring Boot)Langage : JavaFramework : Spring BootOutil de Build : GradleModules/Starters Spring Boot Clés :spring-boot-starter-webspring-boot-starter-data-mongodbspring-boot-starter-securityspring-boot-starter-validationspring-boot-starter-testlombokConception des API : API RESTful utilisant JSON.b. Base de données (MongoDB)Type : Base de données NoSQL orientée documents.Modèle de Données : Schéma flexible, BSON.Collections (Exemples) :utilisateursclasses (Nouvelle collection)coursmatieresinscriptionsnotesassiduiteannoncesappareilsMobilesExemple de document classes :{
+  "_id": "ObjectId(...)",
+  "nomClasse": "1ère A", // Ex: "1ère A", "4ème B"
+  "niveauScolaire": "Niveau 1", // Ou un identifiant/nom plus descriptif comme "Première Année du Collège"
+                               // Correspond à l'un des 4 niveaux scolaires de l'établissement
+  "anneeScolaire": "2024-2025",
+  "idProfesseurPrincipal": "ObjectId(prof_principal_id)", // Référence à un utilisateur (professeur)
+  "listeEtudiantsIds": [ // Liste des IDs des étudiants dans cette classe
+    "ObjectId(student1_id)",
+    "ObjectId(student2_id)"
+  ],
+  "capaciteMax": 20, // Capacité maximale de la classe
+  "listeCoursIds": [ // Liste des IDs des cours suivis par cette classe
+    "ObjectId(cours_math_1A_id)",
+    "ObjectId(cours_fr_1A_id)"
+  ],
+  "sallePrincipale": "S101", // Optionnel
+  "creeLe": "ISODate(...)",
+  "misAJourLe": "ISODate(...)"
+}
+Exemple de document matieres (inchangé) :{
+  "_id": "ObjectId(...)",
+  "nomMatiere": "Mathématiques",
+  "codeMatiere": "MATH",
+  "description": "Étude des nombres, des formes, des structures et des changements.",
+  "departement": "Sciences Exactes"
+}
+Exemple de document cours (révisé) :{
+  "_id": "ObjectId(...)",
+  "nomCours": "Mathématiques - Algèbre et Géométrie",
+  "codeCours": "MATH-N1-2425", // Ex: MATIERE-NIVEAU-ANNEESCOLAIRE
+  "description": "Concepts fondamentaux d'algèbre et de géométrie pour le niveau 1.",
+  "credits": 4, // Ou nombre d'heures par semaine
+  "idMatiere": "ObjectId(math_id)",
+  "idProfesseur": "ObjectId(prof_math_id)",
+  "anneeScolaire": "2024-2025",
+  "semestre": "Annuel", // Ou "1", "2"
+  "niveauScolaireCible": "Niveau 1", // Correspond à l'un des 4 niveaux scolaires
+  "horaire": [ // Horaires spécifiques si le cours n'est pas lié à un emploi du temps de classe global
+    { "jour": "Lundi", "heureDebut": "10:00", "heureFin": "11:00", "salle": "B203" },
+    { "jour": "Mercredi", "heureDebut": "14:00", "heureFin": "15:00", "salle": "B203" }
+  ],
+  "groupes": [ // Si un cours est divisé en groupes plus petits que la classe
+    // { "nomGroupe": "Groupe Alpha", "listeEtudiantsIds": ["ObjectId(...)"] }
+  ],
+  "creeLe": "ISODate(...)",
+  "misAJourLe": "ISODate(...)"
+}
+Exemple de document utilisateurs (mis à jour pour inclure idClasse) :{
+  "_id": "ObjectId(...)",
+  "prenom": "Fatima",
+  "nom": "Zahra",
+  "email": "fatima.zahra@example.com",
+  "motDePasse": "mot_de_passe_hache",
+  "role": "ETUDIANT", // ETUDIANT, PROFESSEUR, ADMIN
+  "dateDeNaissance": "ISODate(...)",
+  "adresse": { /* ... */ },
+  "detailsEtudiant": {
+    "matriculeEtudiant": "IBNROCHD001",
+    "dateInscription": "ISODate(...)",
+    "niveauActuel": "Niveau 1", // Peut être dérivé de la classe
+    "idClasse": "ObjectId(classe_1A_id)" // Référence à la classe de l'étudiant
+  },
+  "detailsProfesseur": { /* ... */ },
+  "tokensAppareilMobile": [
+    { "platforme": "android", "token": "fcm_token_android_123" },
+    { "platforme": "ios", "token": "apns_token_ios_456" }
+  ],
+  "creeLe": "ISODate(...)",
+  "misAJourLe": "ISODate(...)"
+}
+c. FrontendApplication Web (Angular) :Framework : AngularLangage : TypeScriptTechnologies de Base : HTML, CSS (ou SCSS/SASS).Styling : Angular Material, Bootstrap, ou Tailwind CSS.Gestion de l'État : Services Angular, NgRx.Communication API : fetch API (ou HttpClient d'Angular).Application Mobile (Flutter) :Framework : FlutterLangage : DartGestion de l'État : Provider, BLoC/Cubit, Riverpod, GetX.Communication API : Package http de Dart, ou dio.Notifications Push : firebase_messaging.4. Arborescence des Projets (Exemples Détaillés)a. Backend (Spring Boot avec Gradle)ibnrochd-backend/
+├── build.gradle
+├── settings.gradle
+├── gradlew
+├── gradlew.bat
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── ibnrochd/
+│   │   │           ├── IbnRochdApplication.java
+│   │   │           ├── config/
+│   │   │           │   ├── SecurityConfig.java
+│   │   │           │   ├── WebConfig.java
+│   │   │           │   ├── OpenApiConfig.java
+│   │   │           │   └── MongoConfig.java
+│   │   │           ├── controller/
+│   │   │           │   ├── AuthController.java
+│   │   │           │   ├── StudentController.java
+│   │   │           │   ├── TeacherController.java
+│   │   │           │   ├── CourseController.java
+│   │   │           │   ├── SubjectController.java
+│   │   │           │   ├── ClassController.java     // Nouveau: Contrôleur pour les classes
+│   │   │           │   └── AdminController.java
+│   │   │           ├── dto/
+│   │   │           │   ├── AuthRequest.java
+│   │   │           │   ├── UserResponse.java
+│   │   │           │   ├── CourseDto.java
+│   │   │           │   ├── ClassDto.java          // Nouveau: DTO pour les classes
+│   │   │           │   └── ...
+│   │   │           ├── exception/
+│   │   │           │   ├── ResourceNotFoundException.java
+│   │   │           │   └── GlobalExceptionHandler.java
+│   │   │           ├── model/
+│   │   │           │   ├── User.java
+│   │   │           │   ├── Course.java
+│   │   │           │   ├── Subject.java
+│   │   │           │   ├── ClassGroup.java        // Nouveau: Entité pour les classes (nommé ClassGroup pour éviter conflit avec java.lang.Class)
+│   │   │           │   ├── Enrollment.java
+│   │   │           │   ├── Grade.java
+│   │   │           │   └── Role.java
+│   │   │           ├── repository/
+│   │   │           │   ├── UserRepository.java
+│   │   │           │   ├── CourseRepository.java
+│   │   │           │   ├── SubjectRepository.java
+│   │   │           │   ├── ClassGroupRepository.java // Nouveau: Repository pour les classes
+│   │   │           │   └── ...
+│   │   │           ├── service/
+│   │   │           │   ├── impl/
+│   │   │           │   │   ├── UserServiceImpl.java
+│   │   │           │   │   ├── CourseServiceImpl.java
+│   │   │           │   │   ├── ClassGroupServiceImpl.java // Nouveau: Implémentation service classes
+│   │   │           │   │   └── ...
+│   │   │           │   ├── UserService.java
+│   │   │           │   ├── CourseService.java
+│   │   │           │   ├── ClassGroupService.java   // Nouveau: Interface service classes
+│   │   │           │   └── NotificationService.java
+│   │   │           └── security/
+│   │   │               ├── jwt/
+│   │   │               │   ├── JwtTokenProvider.java
+│   │   │               │   └── JwtAuthenticationFilter.java
+│   │   │               └── UserDetailsServiceImpl.java
+│   │   └── resources/
+│   │       ├── application.properties
+│   │       ├── application-dev.properties
+│   │       ├── application-prod.properties
+│   │       ├── static/
+│   │       └── templates/
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── ibnrochd/
+│                   ├── controller/
+│                   ├── service/
+│                   └── repository/
+└── .gitignore
+b. Frontend Web (Angular)ibnrochd-frontend-web/
+├── angular.json
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── src/
+│   ├── main.ts
+│   ├── index.html
+│   ├── styles.scss
+│   ├── environments/
+│   ├── app/
+│   │   ├── app.module.ts
+│   │   ├── app-routing.module.ts
+│   │   ├── app.component.ts
+│   │   ├── core/
+│   │   │   ├── guards/
+│   │   │   ├── interceptors/
+│   │   │   ├── models/
+│   │   │   │   ├── user.model.ts
+│   │   │   │   ├── course.model.ts
+│   │   │   │   └── class-group.model.ts // Nouveau: Modèle pour les classes
+│   │   │   └── services/
+│   │   │       ├── auth.service.ts
+│   │   │       ├── api.service.ts
+│   │   │       └── class-group.service.ts // Nouveau: Service pour les classes
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   ├── student/
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── student-dashboard/
+│   │   │   │   │   └── student-class-info/  // Nouveau: Info sur la classe de l'étudiant
+│   │   │   ├── teacher/
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── teacher-dashboard/
+│   │   │   │   │   └── teacher-class-list/  // Nouveau: Liste des classes du professeur
+│   │   │   ├── admin/
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── admin-dashboard/
+│   │   │   │   │   └── admin-class-management/ // Nouveau: Gestion des classes
+│   │   │   ├── courses/
+│   │   │   └── classes/                  // Nouveau: Module pour la gestion des classes (ou intégré dans admin)
+│   │   │       ├── classes.module.ts
+│   │   │       ├── classes-routing.module.ts
+│   │   │       └── components/
+│   │   │           ├── class-list/
+│   │   │           ├── class-details/
+│   │   │           └── class-form/
+│   │   ├── shared/
+│   │   │   ├── components/
+│   │   │   └── layout/
+│   │   └── assets/
+└── e2e/
+c. Frontend Mobile (Flutter)ibnrochd-frontend-mobile/
+├── android/
+├── ios/
+├── lib/
+│   ├── main.dart
+│   ├── app.dart
+│   ├── config/
+│   │   ├── app_routes.dart
+│   │   ├── app_theme.dart
+│   │   └── constants.dart
+│   ├── core/
+│   │   ├── services/
+│   │   │   ├── api_service.dart
+│   │   │   ├── auth_service.dart
+│   │   │   └── class_group_service.dart // Nouveau: Service pour les données des classes
+│   │   ├── models/
+│   │   │   ├── user_model.dart
+│   │   │   ├── course_model.dart
+│   │   │   └── class_group_model.dart // Nouveau: Modèle pour les classes
+│   │   └── providers_or_blocs/
+│   │       ├── auth_provider.dart
+│   │       └── class_group_provider.dart // Nouveau: Provider/BLoC pour les classes
+│   ├── features/
+│   │   ├── auth/
+│   │   ├── student_dashboard/
+│   │   │   ├── screens/
+│   │   │   │   ├── student_home_screen.dart // Affichera des infos de classe
+│   │   │   │   └── student_class_details_screen.dart // Nouveau
+│   │   │   └── widgets/
+│   │   │       └── class_info_card.dart // Nouveau
+│   │   ├── teacher_dashboard/
+│   │   │   ├── screens/
+│   │   │   │   ├── teacher_home_screen.dart
+│   │   │   │   └── teacher_class_list_screen.dart // Nouveau
+│   │   │   └── widgets/
+│   │   │       └── class_management_tile.dart // Nouveau
+│   │   ├── admin_dashboard/
+│   │   ├── common_course_feature/
+│   │   └── common_class_feature/      // Nouveau: Écrans/widgets communs pour les classes
+│   │       ├── screens/
+│   │       │   └── class_details_screen.dart
+│   │       └── widgets/
+│   ├── shared_widgets/
+│   └── utils/
+├── test/
+├── integration_test/
+├── pubspec.yaml
+├── README.md
+└── .gitignore
+5. Aperçu du Flux de Développement (avec Mobile)(Cette section reste globalement similaire)6. Prochaines Étapes(Cette section reste globalement similaire)L'ajout de ces précisions technologiques et des structures de projet donne une feuille de route plus claire pour le développement de l'application "Ibn Rochd".
