@@ -7,6 +7,8 @@ import com.ibnrochd.model.User;
 import com.ibnrochd.model.ERole;
 import com.ibnrochd.repository.ClassGroupRepository;
 import com.ibnrochd.repository.UserRepository; // Assurez-vous que UserRepository est injecté
+// import com.ibnrochd.repository.CourseRepository; // À décommenter si vous avez un CourseRepository
+// import com.ibnrochd.model.Course; // À décommenter si vous avez une entité Course
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,10 +27,11 @@ public class ClassGroupServiceImpl implements ClassGroupService {
     @Autowired
     private UserRepository userRepository; // Pour valider/mettre à jour les étudiants/professeurs
 
-    // @Autowired
-    // private CourseRepository courseRepository; // Si vous gérez les cours
+    // @Autowired // À décommenter
+    // private CourseRepository courseRepository; // Pour valider les IDs des cours
 
     @Override
+    @Transactional
     public ClassGroup createClassGroup(ClassGroupRequest request) {
         ClassGroup classGroup = new ClassGroup();
         classGroup.setNomClasse(request.getNomClasse());
@@ -39,15 +42,23 @@ public class ClassGroupServiceImpl implements ClassGroupService {
 
         if (request.getIdProfesseurPrincipal() != null) {
             // Optionnel: Valider que l'ID correspond à un professeur existant
-            userRepository.findById(request.getIdProfesseurPrincipal())
+            User professeur = userRepository.findById(request.getIdProfesseurPrincipal())
                 .filter(user -> user.getRoles().stream().anyMatch(role -> role.getName() == ERole.ROLE_PROFESSEUR))
                 .orElseThrow(() -> new ResourceNotFoundException("Professeur principal non trouvé ou invalide avec l'id: " + request.getIdProfesseurPrincipal()));
-            classGroup.setIdProfesseurPrincipal(request.getIdProfesseurPrincipal());
+            classGroup.setIdProfesseurPrincipal(professeur.getId());
         }
 
         if (request.getListeCoursIds() != null) {
-            // Optionnel: Valider les IDs des cours
+            // Valider les IDs des cours s'ils sont fournis
+            /* À décommenter et adapter avec votre CourseRepository
+            for (String courseId : request.getListeCoursIds()) {
+                courseRepository.findById(courseId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Cours non trouvé avec l'id: " + courseId));
+            }
+            */
             classGroup.setListeCoursIds(request.getListeCoursIds());
+        } else {
+            classGroup.setListeCoursIds(new java.util.HashSet<>()); // Initialiser si null
         }
 
         classGroup.setCreeLe(new Date());
@@ -81,8 +92,23 @@ public class ClassGroupServiceImpl implements ClassGroupService {
         classGroup.setAnneeScolaire(request.getAnneeScolaire());
         classGroup.setCapaciteMax(request.getCapaciteMax());
         classGroup.setSallePrincipale(request.getSallePrincipale());
-        classGroup.setIdProfesseurPrincipal(request.getIdProfesseurPrincipal()); // Ajouter validation si nécessaire
-        classGroup.setListeCoursIds(request.getListeCoursIds()); // Ajouter validation si nécessaire
+
+        if (request.getIdProfesseurPrincipal() != null && !request.getIdProfesseurPrincipal().isEmpty()) {
+            User professeur = userRepository.findById(request.getIdProfesseurPrincipal())
+                .filter(user -> user.getRoles().stream().anyMatch(role -> role.getName() == ERole.ROLE_PROFESSEUR))
+                .orElseThrow(() -> new ResourceNotFoundException("Professeur principal non trouvé ou invalide pour la mise à jour avec l'id: " + request.getIdProfesseurPrincipal()));
+            classGroup.setIdProfesseurPrincipal(professeur.getId());
+        } else {
+            classGroup.setIdProfesseurPrincipal(null); // Permettre de dé-assigner
+        }
+
+        if (request.getListeCoursIds() != null) {
+            // Valider les IDs des cours comme dans createClassGroup
+            // ... (logique de validation des cours ici) ...
+            classGroup.setListeCoursIds(request.getListeCoursIds());
+        } else {
+            classGroup.setListeCoursIds(new java.util.HashSet<>());
+        }
         classGroup.setMisAJourLe(new Date());
 
         return classGroupRepository.save(classGroup);
@@ -90,10 +116,18 @@ public class ClassGroupServiceImpl implements ClassGroupService {
 
     @Override
     public void deleteClassGroup(String id) {
-        if (!classGroupRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Classe non trouvée avec l'id: " + id);
+        ClassGroup classGroup = getClassGroupById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Classe non trouvée avec l'id: " + id));
+
+        // Dé-assigner les étudiants de cette classe
+        if (classGroup.getListeEtudiantsIds() != null) {
+            for (String studentId : classGroup.getListeEtudiantsIds()) {
+                userRepository.findById(studentId).ifPresent(student -> {
+                    student.getDetailsEtudiant().setIdClasse(null);
+                    userRepository.save(student);
+                });
+            }
         }
-        // Logique additionnelle: dé-assigner les étudiants de cette classe, etc.
         classGroupRepository.deleteById(id);
     }
 
@@ -101,11 +135,27 @@ public class ClassGroupServiceImpl implements ClassGroupService {
     @Transactional
     public ClassGroup addStudentToClass(String classId, String studentId) {
         ClassGroup classGroup = getClassGroupById(classId).orElseThrow(() -> new ResourceNotFoundException("Classe non trouvée"));
-        User student = userRepository.findById(studentId).orElseThrow(() -> new ResourceNotFoundException("Étudiant non trouvé"));
-        // Valider que l'utilisateur est un étudiant, que la classe n'est pas pleine, etc.
+        User student = userRepository.findById(studentId)
+            .filter(user -> user.getRoles().stream().anyMatch(role -> role.getName() == ERole.ROLE_ETUDIANT))
+            .orElseThrow(() -> new ResourceNotFoundException("Étudiant non trouvé ou l'utilisateur n'est pas un étudiant avec l'id: " + studentId));
+
+        if (classGroup.getListeEtudiantsIds().size() >= classGroup.getCapaciteMax()) {
+            throw new IllegalStateException("La classe a atteint sa capacité maximale.");
+        }
+
+        if (student.getDetailsEtudiant().getIdClasse() != null && !student.getDetailsEtudiant().getIdClasse().equals(classId)) {
+            throw new IllegalArgumentException("L'étudiant est déjà assigné à une autre classe: " + student.getDetailsEtudiant().getIdClasse());
+        }
+        if (classGroup.getListeEtudiantsIds().contains(studentId)) {
+             // L'étudiant est déjà dans cette classe, rien à faire ou retourner la classe telle quelle.
+            return classGroup;
+        }
+
         classGroup.getListeEtudiantsIds().add(studentId);
-        // Mettre à jour User.detailsEtudiant.idClasse (nécessite que User.java ait cette structure)
-        // student.getDetailsEtudiant().setIdClasse(classId); userRepository.save(student);
+        student.getDetailsEtudiant().setIdClasse(classId);
+        student.setDateMiseAJour(new Date());
+        userRepository.save(student);
+
         return classGroupRepository.save(classGroup);
     }
 
@@ -113,11 +163,17 @@ public class ClassGroupServiceImpl implements ClassGroupService {
     @Transactional
     public ClassGroup removeStudentFromClass(String classId, String studentId) {
         ClassGroup classGroup = getClassGroupById(classId).orElseThrow(() -> new ResourceNotFoundException("Classe non trouvée"));
-        // Valider que l'étudiant est dans la classe
+        User student = userRepository.findById(studentId)
+            .orElseThrow(() -> new ResourceNotFoundException("Étudiant non trouvé avec l'id: " + studentId));
+
+        if (!classGroup.getListeEtudiantsIds().contains(studentId) || !classId.equals(student.getDetailsEtudiant().getIdClasse())) {
+            throw new IllegalArgumentException("L'étudiant n'est pas assigné à cette classe ou l'assignation est incohérente.");
+        }
+
         classGroup.getListeEtudiantsIds().remove(studentId);
-        // Mettre à jour User.detailsEtudiant.idClasse à null
-        // User student = userRepository.findById(studentId).orElse(null);
-        // if(student != null) { student.getDetailsEtudiant().setIdClasse(null); userRepository.save(student); }
+        student.getDetailsEtudiant().setIdClasse(null);
+        student.setDateMiseAJour(new Date());
+        userRepository.save(student);
         return classGroupRepository.save(classGroup);
     }
 }
