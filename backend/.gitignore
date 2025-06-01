@@ -1,0 +1,15 @@
+build/
+.gradle
+.gradle/
+.idea/
+*/.gradle
+*/.idea
+*/.gradle
+*/.idea
+gradle-wrapper.jar
+gradlew
+gradlew.bat
+../../.gradle/
+../../idea/
+../../.vscode/
+..gradle/

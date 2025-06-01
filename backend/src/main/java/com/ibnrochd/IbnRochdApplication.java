@@ -4,10 +4,10 @@ package com.ibnrochd;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean; // Ajout pour CommandLineRunner
-import com.ibnrochd.model.ERole; // Ajout
-import com.ibnrochd.model.Role; // Ajout
-import com.ibnrochd.repository.RoleRepository; // Ajout
-import org.springframework.boot.CommandLineRunner; // Ajout
+import com.ibnrochd.model.ERole;
+import com.ibnrochd.model.Role; 
+import com.ibnrochd.repository.RoleRepository; 
+import org.springframework.boot.CommandLineRunner; 
 
 /**
  * Classe principale de l'application Spring Boot Ibn Rochd.
