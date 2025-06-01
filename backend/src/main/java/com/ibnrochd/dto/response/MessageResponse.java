@@ -1,13 +1,11 @@
-// src/main/java/com/ibnrochd/dto/response/MessageResponse.java
 package com.ibnrochd.dto.response;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
-/**
- * DTO pour les messages de réponse génériques.
- */
 @Data
+@NoArgsConstructor
 @AllArgsConstructor
 public class MessageResponse {
     private String message;

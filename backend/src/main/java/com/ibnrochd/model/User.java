@@ -52,7 +52,7 @@ public class User {
     private boolean active = true;
 
     private Date dateCreation = new Date();
-    private Date dateMiseAJour;
+    private Date dateMiseAJour = new Date();
 
     private Date dateDeNaissance;
     // private Adresse adresse; // Si vous avez une classe Adresse
