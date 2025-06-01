@@ -6,8 +6,8 @@ import com.ibnrochd.model.ClassGroup;
 import com.ibnrochd.model.User;
 import com.ibnrochd.model.ERole;
 import com.ibnrochd.repository.ClassGroupRepository;
-import com.ibnrochd.repository.UserRepository; // Assurez-vous que UserRepository est injecté
-// import com.ibnrochd.repository.CourseRepository; // À décommenter si vous avez un CourseRepository
+import com.ibnrochd.repository.UserRepository;
+import com.ibnrochd.repository.CourseRepository; // Décommenté
 // import com.ibnrochd.model.Course; // À décommenter si vous avez une entité Course
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,8 +27,8 @@ public class ClassGroupServiceImpl implements ClassGroupService {
     @Autowired
     private UserRepository userRepository; // Pour valider/mettre à jour les étudiants/professeurs
 
-    // @Autowired // À décommenter
-    // private CourseRepository courseRepository; // Pour valider les IDs des cours
+    @Autowired // Décommenté
+    private CourseRepository courseRepository; // Pour valider les IDs des cours
 
     @Override
     @Transactional
@@ -40,22 +40,20 @@ public class ClassGroupServiceImpl implements ClassGroupService {
         classGroup.setCapaciteMax(request.getCapaciteMax());
         classGroup.setSallePrincipale(request.getSallePrincipale());
 
-        if (request.getIdProfesseurPrincipal() != null) {
-            // Optionnel: Valider que l'ID correspond à un professeur existant
+        if (request.getIdProfesseurPrincipal() != null && !request.getIdProfesseurPrincipal().isEmpty()) {
+            // Valider que l'ID correspond à un professeur existant
             User professeur = userRepository.findById(request.getIdProfesseurPrincipal())
                 .filter(user -> user.getRoles().stream().anyMatch(role -> role.getName() == ERole.ROLE_PROFESSEUR))
                 .orElseThrow(() -> new ResourceNotFoundException("Professeur principal non trouvé ou invalide avec l'id: " + request.getIdProfesseurPrincipal()));
             classGroup.setIdProfesseurPrincipal(professeur.getId());
         }
 
-        if (request.getListeCoursIds() != null) {
+        if (request.getListeCoursIds() != null && !request.getListeCoursIds().isEmpty()) {
             // Valider les IDs des cours s'ils sont fournis
-            /* À décommenter et adapter avec votre CourseRepository
             for (String courseId : request.getListeCoursIds()) {
                 courseRepository.findById(courseId)
                     .orElseThrow(() -> new ResourceNotFoundException("Cours non trouvé avec l'id: " + courseId));
             }
-            */
             classGroup.setListeCoursIds(request.getListeCoursIds());
         } else {
             classGroup.setListeCoursIds(new java.util.HashSet<>()); // Initialiser si null
@@ -102,12 +100,15 @@ public class ClassGroupServiceImpl implements ClassGroupService {
             classGroup.setIdProfesseurPrincipal(null); // Permettre de dé-assigner
         }
 
-        if (request.getListeCoursIds() != null) {
+        if (request.getListeCoursIds() != null && !request.getListeCoursIds().isEmpty()) {
             // Valider les IDs des cours comme dans createClassGroup
-            // ... (logique de validation des cours ici) ...
+            for (String courseId : request.getListeCoursIds()) {
+                courseRepository.findById(courseId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Cours non trouvé pour la mise à jour avec l'id: " + courseId));
+            }
             classGroup.setListeCoursIds(request.getListeCoursIds());
         } else {
-            classGroup.setListeCoursIds(new java.util.HashSet<>());
+            classGroup.setListeCoursIds(new java.util.HashSet<>()); // Initialiser si null ou vide
         }
         classGroup.setMisAJourLe(new Date());
 
@@ -115,6 +116,7 @@ public class ClassGroupServiceImpl implements ClassGroupService {
     }
 
     @Override
+    @Transactional // Important pour la cohérence des données lors des multiples sauvegardes potentielles
     public void deleteClassGroup(String id) {
         ClassGroup classGroup = getClassGroupById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Classe non trouvée avec l'id: " + id));
@@ -124,6 +126,7 @@ public class ClassGroupServiceImpl implements ClassGroupService {
             for (String studentId : classGroup.getListeEtudiantsIds()) {
                 userRepository.findById(studentId).ifPresent(student -> {
                     student.getDetailsEtudiant().setIdClasse(null);
+                    student.setDateMiseAJour(new Date()); // Mettre à jour la date de modification de l'étudiant
                     userRepository.save(student);
                 });
             }
